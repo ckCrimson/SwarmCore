@@ -4,7 +4,7 @@ A data-oriented, highly parallelized spatial simulation engine capable of tracki
 
 This project demonstrates a transition from high-level Object-Oriented design constraints to low-level **Data-Oriented Design (DOD)**, optimizing memory layouts for modern CPU architecture.
 
-## 🚀 Architectural Transformation & Benchmarks
+##  Architectural Transformation & Benchmarks
 
 | Milestone | Architecture Strategy | Sorting Algorithm | Throughput (100k Agents) | Throughput (1M Agents) |
 | :--- | :--- | :--- | :--- | :--- |
@@ -14,7 +14,7 @@ This project demonstrates a transition from high-level Object-Oriented design co
 
 ---
 
-## 🛠️ Hardware & Code-Level Optimizations Implemented
+##  Hardware & Code-Level Optimizations Implemented
 
 ### 1. Memory Density: Array of Structures (AoS) ➡️ Structure of Arrays (SoA)
 Traditional Object-Oriented layouts group entity attributes inside massive class objects, polluting the CPU L1/L2 cache lines with cold data (e.g., meta flags, IDs) during spatial math updates. 
@@ -33,7 +33,7 @@ Leveraged C++20 parallel execution policies (`std::execution::par`) to chunk cal
 
 ---
 
-## 📦 Tech Stack
+## Tech Stack
 * **Core Engine:** C++20 (Modern `std::span`, parallel execution algorithms)
 * **Bindings:** PyBind11 (Zero-copy memory views exposed natively to Python)
 * **Frontend/Testing:** Python 3 (NumPy, performance profiling scripts)
