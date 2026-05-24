@@ -1,0 +1,15 @@
+# C++ Build files
+build/
+.vs/
+out/
+*.obj
+*.exp
+*.lib
+
+# Python
+__pycache__/
+*.pyd
+*.pyc
+
+# OS
+.DS_Store
