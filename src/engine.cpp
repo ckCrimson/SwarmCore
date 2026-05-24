@@ -3,9 +3,12 @@
 #include <unordered_map>
 #include <span> 
 #include <cmath>
+#include <cstdint>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h> 
 #include <algorithm> 
+#include <execution>
+
 
 namespace py = pybind11;
 
@@ -39,11 +42,13 @@ struct GridCell3D {
 };
 
 struct GridHasher {
-    size_t operator()(const GridCell3D& grid) const {
-        const size_t P1 = 73856093;
-        const size_t P2 = 19349663;
-        const size_t P3 = 83492791;
-        return (grid.x * P1) ^ (grid.y * P2) ^ (grid.z * P3);
+    uint32_t operator()(const GridCell3D& grid) const {
+        const uint32_t P1 = 73856093;
+        const uint32_t P2 = 19349663;
+        const uint32_t P3 = 83492791;
+        return (static_cast<uint32_t>(grid.x) * P1) ^ 
+               (static_cast<uint32_t>(grid.y) * P2) ^ 
+               (static_cast<uint32_t>(grid.z) * P3);
     }
 };
 
@@ -56,7 +61,7 @@ inline GridCell3D get_grid_cell(float x, float y, float z, float cell_size) {
 }
 
 struct AgentLocation {
-    size_t cell_hash; 
+    uint32_t cell_hash; 
     size_t agent_index; 
 };
 
@@ -64,7 +69,7 @@ struct AgentLocation {
 // FAST O(N) RADIX SORT HELPER (STRICT DOD)
 // =========================================================================
 inline void radix_sort_agent_locations(AgentLocation* src, AgentLocation* dst, size_t count) {
-    constexpr int PASSES = sizeof(size_t);
+    constexpr int PASSES = sizeof(uint32_t);
     constexpr size_t RADIX = 256;
     
     AgentLocation* current_src = src;
@@ -116,9 +121,10 @@ public:
         }
     }
     static void move_agents_forward(AgentFastRef fast_ref, float delta_time) {
-        for (size_t i = 0; i < fast_ref.x.size(); ++i) {
-            fast_ref.x[i] += (5.0f * delta_time); 
-        }
+        std::for_each(std::execution::par, fast_ref.x.begin(), fast_ref.x.end(),
+            [delta_time](float& x_pos) {
+                x_pos += (5.0f * delta_time);
+            });
     }
 };
 
@@ -132,6 +138,7 @@ private:
     std::unordered_map<int, size_t> id_to_index; 
     size_t active_agents_count = 0;
     float cell_size;
+    std::vector<size_t> execution_indices;
     
     std::vector<AgentLocation> spatial_grid_flat;
     std::vector<AgentLocation> spatial_grid_temp; 
@@ -146,6 +153,7 @@ public:
         
         spatial_grid_flat.resize(capacity);
         spatial_grid_temp.resize(capacity);
+        execution_indices.resize(capacity); // Allocate space up front
 
         for (size_t i = 0; i < agents_array.size(); ++i) {
             const Agent& agent = agents_array[i];
@@ -160,22 +168,28 @@ public:
         rebuild_spatial_index();
     }
     
-    void rebuild_spatial_index() {
-        GridHasher hasher;
-        
-        for(size_t i = 0; i < active_agents_count; i++) {
-            GridCell3D cell = get_grid_cell(
-                agent_positions.x[i], 
-                agent_positions.y[i], 
-                agent_positions.z[i], 
-                cell_size
-            );
-            spatial_grid_flat[i] = { hasher(cell), i }; 
-        }
-        
-        radix_sort_agent_locations(spatial_grid_flat.data(), spatial_grid_temp.data(), active_agents_count);
-    }
-
+void rebuild_spatial_index() {
+    GridHasher hasher;
+    
+    // Create a vector of sequential indices to drive the parallel loop cleanly
+    // (This acts as our execution scheduler)
+    std::vector<size_t> indices(active_agents_count);
+    // Note: To optimize further, make 'indices' a private member variable 
+    // resized once in the constructor so we don't allocate here!
+    
+    // Simple fast linear assignment
+    for(size_t i = 0; i < active_agents_count; ++i) indices[i] = i;
+    
+    // Parallel loop over independent indices—zero false sharing, direct memory streams
+std::for_each(std::execution::par, execution_indices.begin(), execution_indices.begin() + active_agents_count,
+    [this, hasher](size_t i) {
+        GridCell3D cell = get_grid_cell(agent_positions.x[i], agent_positions.y[i], agent_positions.z[i], cell_size);
+        spatial_grid_flat[i] = { hasher(cell), i }; 
+    });
+    
+    // Sequential Radix sort stays fast and clean
+    radix_sort_agent_locations(spatial_grid_flat.data(), spatial_grid_temp.data(), active_agents_count);
+}
     AgentFastRef generate_fast_ref() {
         return {
             std::span<float>(agent_positions.x.data(), active_agents_count),

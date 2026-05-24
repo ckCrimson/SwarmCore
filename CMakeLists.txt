@@ -26,6 +26,6 @@ target_include_directories(fast_spatial_engine PRIVATE ${PYBIND11_INCLUDES})
 
 # Apply maximum speed optimizations for the compiler
 if(MSVC)
-    target_compile_options(fast_spatial_engine PRIVATE /O2 /Oi /GL /fp:fast)
-    set_target_properties(fast_spatial_engine PROPERTIES LINK_FLAGS "/LTCG")
+        target_compile_options(fast_spatial_engine PRIVATE /O2 /Oi /GL /fp:fast /openmp)
+        set_target_properties(fast_spatial_engine PROPERTIES LINK_FLAGS "/LTCG")
 endif()

@@ -3,7 +3,7 @@ import random
 import fast_spatial_engine
 
 # --- CONFIGURATION ---
-NUM_AGENTS = 100000  # Pushing the 1 Million Limit!
+NUM_AGENTS = 1000000  # Pushing the 1 Million Limit!
 FRAMES = 100
 DELTA_TIME = 0.016
 CELL_SIZE = 10.0
