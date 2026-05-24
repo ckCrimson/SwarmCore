@@ -20,11 +20,9 @@ print("--- BEFORE MOVING ---")
 world.debug_print_state()
 
 # 3. Step the engine forward (using a big time step: 2.0)
+# This will move the agents and rebuild the spatial index directly in C++
 delta_time = 2.0
-fast_spatial_engine.move_agents_forward(world, delta_time)
-
-# 4. Tell the engine to rebuild its memory map
-world.rebuild_spatial_index()
+world.simulate(1, delta_time)
 
 print("--- AFTER MOVING ---")
 world.debug_print_state()
