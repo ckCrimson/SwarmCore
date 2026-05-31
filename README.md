@@ -56,6 +56,37 @@ Transitioned to a pure Data-Oriented ECS architecture. The memory manager (`Engi
 
 ---
 
+## 🧮 Mathematical Profiling & Engine Constraints
+
+To guarantee a stable 60 FPS under high loads, the engine's architecture is modeled around the core execution time of the spatial grid's narrow-phase search.
+
+For a lock-free, parallelized spatial grid, the theoretical execution time for a single physics frame ($T_{\text{frame}}$) is defined as:
+
+$$T_{\text{frame}} \approx N \cdot N_{\text{neigh}} \cdot \tau$$
+
+**Where:**
+
+* **$N$**: Total number of active agents in the simulation.
+* **$N_{\text{neigh}}$**: The average number of agents present within a local $3 \times 3$ grid neighborhood.
+* **$\tau$**: The hardware constant (The CPU time required to fetch memory, evaluate distance, and compute the force vector for a single pair).
+
+### The "Density Singularity" Problem
+
+The fundamental vulnerability of spatial hashing is local clustering. If attractive forces cause agents to clump into a single coordinate, $N_{\text{neigh}}$ rapidly approaches $N$. This triggers a catastrophic density collapse, reverting the engine's linear $O(N)$ efficiency back into a sluggish $O(N^2)$ algorithm.
+
+### Architectural Restrictions & Optimizations
+
+To prevent this quadratic cascade and maintain sub-16ms frame times, we implemented strict restrictions on the impact parameters:
+
+| Parameter | Impact on Computation ($T_{\text{frame}}$) | Engine Restriction / Strategy |
+| --- | --- | --- |
+| **Total Agents ($N$)** | Scales linearly. | Bound strictly by the available CPU threads and total RAM bandwidth. |
+| **Local Density ($N_{\text{neigh}}$)** | Causes exponential slowdowns if unchecked due to quadratic pair-checking. | **Hard Collision Solvers:** Elastic vector separation is injected *before* field resolution to physically cap the maximum agents per cell. |
+| **Hardware Latency ($\tau$)** | Cache misses will multiply this constant by $10\times$ to $50\times$. | **Data-Oriented Design:** Structure of Arrays (SoA) and Radix memory sorting ensure L1 cache hits, minimizing $\tau$. |
+| **Grid Lookup Overhead** | Empty cells cause wasted hash-table operations, stalling the pipeline. | **Bitwise Masking:** The Hash Directory is locked to $2^{18}$ buckets, allowing 1-cycle bitwise lookups (`& HASH_MASK`). |
+
+---
+
 ## 🛠 Tech Stack
 
 * **Core Engine:** C++20 (Modern `std::span`, parallel execution algorithms)
