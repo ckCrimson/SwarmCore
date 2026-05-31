@@ -14,6 +14,36 @@ This project demonstrates a transition from high-level Object-Oriented design co
 
 ---
 
+## ⚙️ The Physics Execution Loop
+
+To maintain mathematical stability and prevent density collapses (Singularity), each simulation frame strictly adheres to a sequential 4-step pipeline. Hard physical boundaries are resolved *before* soft dynamic fields are calculated.
+
+```mermaid
+graph TD
+    FrameStart((Frame Start)) --> Interpolate
+    
+    subgraph Core Physics Pipeline
+        Interpolate[1. Interpolate / Grid Rebuild<br/>Hash Agents to Spatial Directory] --> Collision
+        Collision[2. Hard Collision Phase<br/>'Singularity Shield'] --> Field
+        Field[3. Field Resolution Phase<br/>Soft Attractive & Repulsive Forces] --> Evolve
+        Evolve[4. Evolve Phase<br/>Euler Integration Update]
+    end
+    
+    Evolve -->|Tick dt| FrameStart
+    
+    classDef highlight fill:#2d3436,stroke:#74b9ff,stroke-width:2px,color:#fff;
+    class Interpolate,Collision,Field,Evolve highlight;
+```
+
+### Pipeline Breakdown
+
+1. **Interpolate (Spatial Update):** Agents are mapped to the memory-aligned spatial grid. Data is sorted via Radix Sort to ensure the subsequent physics steps benefit from contiguous L1 cache prefetching.
+2. **Collision (The "Singularity Shield"):** A rigid constraint solver. Agents are checked against geometric bounds (Circles or AABBs) and pushed out of overlapping states. Resolving this *first* guarantees the maximum local density ($N_{\text{neigh}}$) remains mathematically bounded.
+3. **Field (Soft Dynamics):** The N-body interaction phase. Using the lock-free local accumulators, agents calculate their net attractive and repulsive vectors based on the linear physics kernels. Because collisions were already resolved, this step is protected from $O(N^2)$ density spikes.
+4. **Evolve (Integration):** The final velocity and position vectors are updated using the defined time step ($\Delta t$), and the exact state is made available for the rendering frontend.
+
+---
+
 ## 🧠 Hardware & Code-Level Optimizations Implemented
 
 ### 1. Memory Density: Array of Structures (AoS) ➡️ Structure of Arrays (SoA)
@@ -84,36 +114,6 @@ To prevent this quadratic cascade and maintain sub-16ms frame times, we implemen
 | **Local Density ($N_{\text{neigh}}$)** | Causes exponential slowdowns if unchecked due to quadratic pair-checking. | **Hard Collision Solvers:** Elastic vector separation is injected *before* field resolution to physically cap the maximum agents per cell. |
 | **Hardware Latency ($\tau$)** | Cache misses will multiply this constant by $10\times$ to $50\times$. | **Data-Oriented Design:** Structure of Arrays (SoA) and Radix memory sorting ensure L1 cache hits, minimizing $\tau$. |
 | **Grid Lookup Overhead** | Empty cells cause wasted hash-table operations, stalling the pipeline. | **Bitwise Masking:** The Hash Directory is locked to $2^{18}$ buckets, allowing 1-cycle bitwise lookups (`& HASH_MASK`). |
-
----
-
-## ⚙️ The Physics Execution Loop
-
-To maintain mathematical stability and prevent density collapses (Singularity), each simulation frame strictly adheres to a sequential 4-step pipeline. Hard physical boundaries are resolved *before* soft dynamic fields are calculated.
-
-```mermaid
-graph TD
-    FrameStart((Frame Start)) --> Interpolate
-    
-    subgraph Core Physics Pipeline
-        Interpolate[1. Interpolate / Grid Rebuild<br/>Hash Agents to Spatial Directory] --> Collision
-        Collision[2. Hard Collision Phase<br/>'Singularity Shield'] --> Field
-        Field[3. Field Resolution Phase<br/>Soft Attractive & Repulsive Forces] --> Evolve
-        Evolve[4. Evolve Phase<br/>Euler Integration Update]
-    end
-    
-    Evolve -->|Tick dt| FrameStart
-    
-    classDef highlight fill:#2d3436,stroke:#74b9ff,stroke-width:2px,color:#fff;
-    class Interpolate,Collision,Field,Evolve highlight;
-```
-
-### Pipeline Breakdown
-
-1. **Interpolate (Spatial Update):** Agents are mapped to the memory-aligned spatial grid. Data is sorted via Radix Sort to ensure the subsequent physics steps benefit from contiguous L1 cache prefetching.
-2. **Collision (The "Singularity Shield"):** A rigid constraint solver. Agents are checked against geometric bounds (Circles or AABBs) and pushed out of overlapping states. Resolving this *first* guarantees the maximum local density ($N_{\text{neigh}}$) remains mathematically bounded.
-3. **Field (Soft Dynamics):** The N-body interaction phase. Using the lock-free local accumulators, agents calculate their net attractive and repulsive vectors based on the linear physics kernels. Because collisions were already resolved, this step is protected from $O(N^2)$ density spikes.
-4. **Evolve (Integration):** The final velocity and position vectors are updated using the defined time step ($\Delta t$), and the exact state is made available for the rendering frontend.
 
 ---
 
