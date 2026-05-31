@@ -87,6 +87,36 @@ To prevent this quadratic cascade and maintain sub-16ms frame times, we implemen
 
 ---
 
+## ⚙️ The Physics Execution Loop
+
+To maintain mathematical stability and prevent density collapses (Singularity), each simulation frame strictly adheres to a sequential 4-step pipeline. Hard physical boundaries are resolved *before* soft dynamic fields are calculated.
+
+```mermaid
+graph TD
+    FrameStart((Frame Start)) --> Interpolate
+    
+    subgraph Core Physics Pipeline
+        Interpolate[1. Interpolate / Grid Rebuild<br/>Hash Agents to Spatial Directory] --> Collision
+        Collision[2. Hard Collision Phase<br/>'Singularity Shield'] --> Field
+        Field[3. Field Resolution Phase<br/>Soft Attractive & Repulsive Forces] --> Evolve
+        Evolve[4. Evolve Phase<br/>Euler Integration Update]
+    end
+    
+    Evolve -->|Tick dt| FrameStart
+    
+    classDef highlight fill:#2d3436,stroke:#74b9ff,stroke-width:2px,color:#fff;
+    class Interpolate,Collision,Field,Evolve highlight;
+```
+
+### Pipeline Breakdown
+
+1. **Interpolate (Spatial Update):** Agents are mapped to the memory-aligned spatial grid. Data is sorted via Radix Sort to ensure the subsequent physics steps benefit from contiguous L1 cache prefetching.
+2. **Collision (The "Singularity Shield"):** A rigid constraint solver. Agents are checked against geometric bounds (Circles or AABBs) and pushed out of overlapping states. Resolving this *first* guarantees the maximum local density ($N_{\text{neigh}}$) remains mathematically bounded.
+3. **Field (Soft Dynamics):** The N-body interaction phase. Using the lock-free local accumulators, agents calculate their net attractive and repulsive vectors based on the linear physics kernels. Because collisions were already resolved, this step is protected from $O(N^2)$ density spikes.
+4. **Evolve (Integration):** The final velocity and position vectors are updated using the defined time step ($\Delta t$), and the exact state is made available for the rendering frontend.
+
+---
+
 ## 🛠 Tech Stack
 
 * **Core Engine:** C++20 (Modern `std::span`, parallel execution algorithms)
